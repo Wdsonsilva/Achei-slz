@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const categorias = [
   { nome: "Peças para motos", emoji: "🏍️" },
@@ -23,7 +23,7 @@ const produtos = [
     loja: "Moto Peças SLZ",
     preco: 89.90,
     emoji: "🏍️",
-    imagem: "/produtos/freio.jpg.jpg",
+    imagem: "/produtos/freio.jpg",
   },
   {
     id: 2,
@@ -32,7 +32,7 @@ const produtos = [
     loja: "Auto Peças Maranhão",
     preco: 189.90,
     emoji: "🚗",
-    imagem: "/produtos/farol.jpg.jpg",
+    imagem: "/produtos/farol.jpg",
   },
   {
     id: 3,
@@ -41,7 +41,7 @@ const produtos = [
     loja: "Moda SLZ",
     preco: 69.90,
     emoji: "👕",
-    imagem: "/produtos/camisa.jpg.webp",
+    imagem: "/produtos/camisa.webp",
   },
 ];
 
@@ -49,14 +49,50 @@ const produtos = [
 export default function Home() { 
   
   const [categoriaSelecionada, setCategoriaSelecionada] = useState("Todas");
+  const [busca, setBusca] = useState("");
   const [produtoSelecionado, setProdutoSelecionado] = useState<(typeof produtos)[number] | null>(null);
 
-  const produtosFiltrados =
-  categoriaSelecionada === "Todas"
-    ? produtos
-    : produtos.filter(
-        (produto) => produto.categoria === categoriaSelecionada
+  // Fecha o dialog com Esc e trava a rolagem da página enquanto ele está aberto
+  useEffect(() => {
+    if (!produtoSelecionado) return;
+    const fecharComEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProdutoSelecionado(null);
+    };
+    document.addEventListener("keydown", fecharComEsc);
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", fecharComEsc);
+      document.body.style.overflow = "";
+    };
+  }, [produtoSelecionado]);
+
+  // Ignora maiúsculas e acentos na busca ("camisa" encontra "Camisa", "eletronico" encontra "Eletrônicos")
+  const normalizar = (texto: string) =>
+    texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+  const termoBusca = normalizar(busca);
+
+  const produtosFiltrados = produtos.filter((produto) => {
+    const daCategoria =
+      categoriaSelecionada === "Todas" || produto.categoria === categoriaSelecionada;
+    const casaBusca =
+      termoBusca === "" ||
+      [produto.nome, produto.categoria, produto.loja].some((campo) =>
+        normalizar(campo).includes(termoBusca)
       );
+    return daCategoria && casaBusca;
+  });
+
+  const temFiltroAtivo = categoriaSelecionada !== "Todas" || termoBusca !== "";
+
+  const limparFiltros = () => {
+    setCategoriaSelecionada("Todas");
+    setBusca("");
+  };
+
+  const irParaProdutos = () => {
+    document.getElementById("produtos")?.scrollIntoView({ behavior: "smooth" });
+  };
   return (
     <main className="min-h-screen bg-[#F8F6F0] text-[#172B4D]">
 
@@ -100,20 +136,30 @@ export default function Home() {
           em um só lugar.
         </p>
 
-        <div className="mx-auto mt-8 flex max-w-xl flex-col gap-3 sm:flex-row">
+        <form
+          role="search"
+          onSubmit={(e) => {
+            e.preventDefault();
+            irParaProdutos();
+          }}
+          className="mx-auto mt-8 flex max-w-xl flex-col gap-3 sm:flex-row"
+        >
           <input
             type="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
             placeholder="O que você está procurando?"
+            aria-label="Buscar produtos"
             className="min-w-0 flex-1 rounded-xl bg-white px-5 py-4 text-gray-800 outline-none"
           />
 
-          <a
-            href="#lojas"
+          <button
+            type="submit"
             className="rounded-xl bg-[#EA6A35] px-8 py-4 font-bold text-white"
           >
             Buscar
-          </a>
-        </div>
+          </button>
+        </form>
       </section>
 
       {/* CATEGORIAS */}
@@ -126,14 +172,19 @@ export default function Home() {
           Encontre o que precisa perto de você.
         </p>
 
-        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-6">
-          {categorias.map((categoria) => (
-            <a
-              href="#lojas"
-              onClick={() =>
-                 setCategoriaSelecionada(categoria.nome)}
+        <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4 md:grid-cols-7">
+          {[{ nome: "Todas", emoji: "🛍️" }, ...categorias].map((categoria) => (
+            <button
+              type="button"
+              onClick={() => {
+                setCategoriaSelecionada(categoria.nome);
+                irParaProdutos();
+              }}
               key={categoria.nome}
-              className="rounded-2xl bg-white p-6 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-md"
+              aria-pressed={categoriaSelecionada === categoria.nome}
+              className={`rounded-2xl bg-white p-6 text-center shadow-sm transition hover:-translate-y-1 hover:shadow-md ${
+                categoriaSelecionada === categoria.nome ? "ring-2 ring-[#EA6A35]" : ""
+              }`}
             >
               <span className="text-4xl">
                 {categoria.emoji}
@@ -142,7 +193,7 @@ export default function Home() {
               <p className="mt-3 font-semibold">
                 {categoria.nome}
               </p>
-            </a>
+            </button>
           ))}
         </div>
       </section>
@@ -155,9 +206,29 @@ export default function Home() {
     Produtos em destaque
   </h2>
 
-  <p className="mt-2 text-gray-600">
-    Confira produtos das lojas de São Luís.
-  </p>
+  <div className="mt-2 flex flex-wrap items-center gap-3 text-gray-600">
+    <p>
+      {temFiltroAtivo
+        ? `${produtosFiltrados.length} produto(s) encontrado(s)`
+        : "Confira produtos das lojas de São Luís."}
+    </p>
+
+    {temFiltroAtivo && (
+      <button
+        type="button"
+        onClick={limparFiltros}
+        className="rounded-lg bg-gray-200 px-3 py-1 text-sm text-gray-800"
+      >
+        Limpar filtros
+      </button>
+    )}
+  </div>
+
+  {produtosFiltrados.length === 0 && (
+    <p className="mt-8 rounded-2xl bg-white p-6 text-center text-gray-600 shadow-sm">
+      Nenhum produto encontrado. Tente outro termo ou categoria.
+    </p>
+  )}
 
   <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
 
@@ -197,10 +268,7 @@ export default function Home() {
 
         <button
           type="button"
-          onClick={() => {
-  alert("Clique reconhecido!");
-  setProdutoSelecionado(produto);
-}}
+          onClick={() => setProdutoSelecionado(produto)}
           className="mt-4 w-full rounded-xl bg-[#EA6A35] px-4 py-3 font-semibold text-white"
         >
           Ver produto
@@ -264,57 +332,6 @@ export default function Home() {
       </section>
 
       
-{/* DETALHES DO PRODUTO */}
-{produtoSelecionado && (
-  <section className="bg-white px-6 py-12">
-    <div className="mx-auto max-w-4xl rounded-2xl p-6 shadow-lg">
-
-      <button
-        type="button"
-        onClick={() => setProdutoSelecionado(null)}
-        className="mb-6 rounded-lg bg-gray-200 px-4 py-2 text-gray-800"
-      >
-        ← Voltar aos produtos
-      </button>
-
-      <div className="grid gap-8 md:grid-cols-2">
-
-        <img
-          src={produtoSelecionado.imagem}
-          alt={produtoSelecionado.nome}
-          className="h-72 w-full rounded-xl object-contain"
-        />
-
-        <div>
-          <p className="text-sm text-gray-500">
-            {produtoSelecionado.categoria}
-          </p>
-
-          <h2 className="mt-2 text-3xl font-bold">
-            {produtoSelecionado.nome}
-          </h2>
-
-          <p className="mt-4 text-gray-600">
-            Loja: {produtoSelecionado.loja}
-          </p>
-
-          <p className="mt-6 text-3xl font-bold text-[#27856B]">
-            {produtoSelecionado.preco.toLocaleString("pt-BR", {
-              style: "currency",
-              currency: "BRL",
-            })}
-          </p>
-
-          <p className="mt-4 text-gray-600">
-            Consulte a loja para obter mais informações sobre este produto.
-          </p>
-        </div>
-
-      </div>
-    </div>
-  </section>
-)}
-
       {/* RODAPÉ */}
       <footer className="bg-[#172B4D] px-6 py-8 text-center text-white">
         <h2 className="text-xl font-bold text-orange-400">
@@ -329,6 +346,63 @@ export default function Home() {
           © 2026 Achei SLZ. Todos os direitos reservados.
         </p>
       </footer>
+
+      {/* DETALHES DO PRODUTO (DIALOG) */}
+      {produtoSelecionado && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="titulo-produto"
+          onClick={() => setProdutoSelecionado(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-6 shadow-lg"
+          >
+            <button
+              type="button"
+              onClick={() => setProdutoSelecionado(null)}
+              className="mb-6 rounded-lg bg-gray-200 px-4 py-2 text-gray-800"
+            >
+              ← Voltar aos produtos
+            </button>
+
+            <div className="grid gap-8 md:grid-cols-2">
+              <img
+                src={produtoSelecionado.imagem}
+                alt={produtoSelecionado.nome}
+                className="h-72 w-full rounded-xl object-contain"
+              />
+
+              <div>
+                <p className="text-sm text-gray-500">
+                  {produtoSelecionado.categoria}
+                </p>
+
+                <h2 id="titulo-produto" className="mt-2 text-3xl font-bold">
+                  {produtoSelecionado.nome}
+                </h2>
+
+                <p className="mt-4 text-gray-600">
+                  Loja: {produtoSelecionado.loja}
+                </p>
+
+                <p className="mt-6 text-3xl font-bold text-[#27856B]">
+                  {produtoSelecionado.preco.toLocaleString("pt-BR", {
+                    style: "currency",
+                    currency: "BRL",
+                  })}
+                </p>
+
+                <p className="mt-4 text-gray-600">
+                  Consulte a loja para obter mais informações sobre este produto.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </main>
   );
